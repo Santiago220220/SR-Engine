@@ -18,6 +18,7 @@ import flixel.ui.FlxBar;
 import flixel.util.FlxSort;
 import lime.system.System;
 import objects.*;
+import NoteInputState;
 import openfl.events.KeyboardEvent;
 #if SHADERS_ALLOWED
 import openfl.filters.BitmapFilter;
@@ -376,6 +377,7 @@ class PlayState extends MusicBeatState
 	// Less laggy controls
 	private var keysArray:Array<Dynamic>;
 	private var controlArray:Array<String>;
+	private var noteGroups:Array<FlxTypedGroup<Note>> = [];
 
 	public var songName:String;
 
@@ -1091,6 +1093,7 @@ class PlayState extends MusicBeatState
 		notes = new FlxTypedGroup<Note>();
 		add(notes);
 		notes.visible = sustainNotes.visible = ClientPrefs.showNotes; //that was easier than expected
+		noteGroups = [notes, sustainNotes];
 
 		add(grpNoteSplashes);
 		add(grpHoldSplashes);
@@ -2231,7 +2234,7 @@ class PlayState extends MusicBeatState
 					}
 				}
 
-				for (group in [notes, sustainNotes]) group.forEachAlive(function(note:Note) {
+				for (group in noteGroups) group.forEachAlive(function(note:Note) {
 					if(ClientPrefs.opponentStrums || !ClientPrefs.opponentStrums || middleScroll || !note.mustPress)
 					{
 						note.alpha *= 0.35;
@@ -2292,7 +2295,7 @@ class PlayState extends MusicBeatState
 
 	public function clearNotesBefore(time:Float)
 	{
-		for (group in [notes, sustainNotes])
+		for (group in noteGroups)
 		{
 			var i:Int = group.length - 1;
 			while (i >= 0) {
@@ -2812,7 +2815,7 @@ class PlayState extends MusicBeatState
 
 		if (ClientPrefs.noteColorStyle == 'Char-Based')
 		{
-			for (group in [notes, sustainNotes])
+			for (group in noteGroups)
 				for (note in group){
 					if (note == null)
 						continue;
@@ -3584,7 +3587,7 @@ class PlayState extends MusicBeatState
 				else if (ClientPrefs.charsAndBG) playerDance();
 
 				amountOfRenderedNotes = 0;
-				for (group in [notes, sustainNotes])
+				for (group in noteGroups)
 				{
 					group.forEach(function(daNote)
 					{
@@ -4261,7 +4264,7 @@ class PlayState extends MusicBeatState
 				}
 				if (ClientPrefs.noteColorStyle == 'Char-Based')
 				{
-					for (group in [notes, sustainNotes])
+					for (group in noteGroups)
 						for (note in group){
 							if (note == null)
 								continue;
@@ -4704,7 +4707,7 @@ class PlayState extends MusicBeatState
 	}
 
 	public function KillNotes() {
-		for (group in [notes, sustainNotes])
+		for (group in noteGroups)
 		while (group.length > 0) {
 			group.remove(group.members[0], true);
 		}
@@ -5119,7 +5122,7 @@ class PlayState extends MusicBeatState
 		var pressArray:Array<Bool> = parseKeys('_P');
 		var releaseArray:Array<Bool> = parseKeys('_R');
 		strumsHeld = holdArray;
-		strumHeldAmount = strumsHeld.filter(function(value) return value).length;
+		strumHeldAmount = controls.countActiveNotes();
 
 		// TO DO: Find a better way to handle controller inputs, this should work for now
 		if(ClientPrefs.controllerMode)
@@ -5140,7 +5143,7 @@ class PlayState extends MusicBeatState
 		{
 			// rewritten inputs???
 			/*
-			for (group in [notes, sustainNotes]) group.forEachAlive(function(daNote:Note)
+			for (group in noteGroups) group.forEachAlive(function(daNote:Note)
 			{
 				// hold note functions
 				if (!usingBotEnergy && strumsBlocked[daNote.noteData] != true && daNote.isSustainNote && holdArray[daNote.noteData] && daNote.canBeHit
@@ -5149,20 +5152,21 @@ class PlayState extends MusicBeatState
 				}
 			});
 			*/
-			for (group in [notes, sustainNotes]){
-				if (group.length > 0)
+			for (group in noteGroups){
+				var members = group.members;
+				for (idx in 0...members.length)
 				{
-					for (n in group.members)
-					{ // I can't do a filter here, that's kinda awesome
-						var canHit:Bool = (n != null && !usingBotEnergy && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit);
+					var n = members[idx];
+					if (n == null) continue;
 
-						if (canHit && n.isSustainNote)
-						{
-							var released:Bool = !holdArray[n.noteData];
+					var canHit:Bool = !usingBotEnergy && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit;
 
-							if (!released)
-								goodNoteHit(n);
-						}
+					if (canHit && n.isSustainNote)
+					{
+						var released:Bool = !holdArray[n.noteData];
+
+						if (!released)
+							goodNoteHit(n);
 					}
 				}
 			}
@@ -5204,12 +5208,12 @@ class PlayState extends MusicBeatState
 
 	public function parseKeys(?suffix:String = ''):Array<Bool>
 	{
-		var ret:Array<Bool> = [];
-		for (i in 0...controlArray.length)
+		return switch (suffix)
 		{
-			ret[i] = Reflect.getProperty(controls, controlArray[i] + suffix);
+			case '_P': controls.getNoteStates(NoteInputState.Press);
+			case '_R': controls.getNoteStates(NoteInputState.Release);
+			default: controls.getNoteStates(NoteInputState.Hold);
 		}
-		return ret;
 	}
 
 	function noteMiss(daNote:Note = null, daNoteAlt:PreloadedChartNote = null):Void { //You didn't hit the key and let it go offscreen, also used by Hurt Notes

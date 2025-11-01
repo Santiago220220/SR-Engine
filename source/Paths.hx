@@ -959,6 +959,7 @@ class Paths
 
 
 	public static var globalMods:Array<String> = [];
+	static var modDirectoriesCache:Array<String> = null;
 
 	static public function getGlobalMods()
 		return globalMods;
@@ -992,21 +993,34 @@ class Paths
 				}
 			}
 		}
+		invalidateModDirectories();
 		return globalMods;
 	}
 
+	public static function invalidateModDirectories():Void {
+		modDirectoriesCache = null;
+	}
+
 	static public function getModDirectories():Array<String> {
+		#if sys
+		if (modDirectoriesCache != null)
+			return modDirectoriesCache.copy();
+
 		var list:Array<String> = [];
 		var modsFolder:String = mods();
 		if(FileSystem.exists(modsFolder)) {
 			for (folder in FileSystem.readDirectory(modsFolder)) {
 				var path = haxe.io.Path.join([modsFolder, folder]);
-				if (sys.FileSystem.isDirectory(path) && !ignoreModFolders.contains(folder) && !list.contains(folder)) {
+				if (FileSystem.isDirectory(path) && !ignoreModFolders.contains(folder) && !list.contains(folder)) {
 					list.push(folder);
 				}
 			}
 		}
-		return list;
+		modDirectoriesCache = list;
+		return list.copy();
+		#else
+		return [];
+		#end
 	}
 	#end
 

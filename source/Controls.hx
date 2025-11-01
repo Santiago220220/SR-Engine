@@ -1,5 +1,6 @@
 package;
 
+import flixel.FlxG;
 import flixel.input.FlxInput;
 import flixel.input.actions.FlxAction;
 import flixel.input.actions.FlxActionInput;
@@ -9,6 +10,8 @@ import flixel.input.actions.FlxActionSet;
 import flixel.input.gamepad.FlxGamepadButton;
 import flixel.input.gamepad.FlxGamepadInputID;
 import flixel.input.keyboard.FlxKey;
+import haxe.Timer;
+import NoteInputState;
 
 enum abstract Action(String) to String from String
 {
@@ -116,6 +119,16 @@ class Controls extends FlxActionSet
 	var _back = new FlxActionDigital(Action.BACK);
 	var _pause = new FlxActionDigital(Action.PAUSE);
 	var _reset = new FlxActionDigital(Action.RESET);
+
+	static inline final NOTE_COUNT:Int = 4;
+	final noteActions:Array<FlxActionDigital>;
+	final notePressActions:Array<FlxActionDigital>;
+	final noteReleaseActions:Array<FlxActionDigital>;
+	final noteHoldCache:Array<Bool> = [false, false, false, false];
+	final notePressCache:Array<Bool> = [false, false, false, false];
+	final noteReleaseCache:Array<Bool> = [false, false, false, false];
+	final noteHoldDurations:Array<Float> = [0.0, 0.0, 0.0, 0.0];
+	final noteLastPress:Array<Float> = [-1.0, -1.0, -1.0, -1.0];
 
 	var byName:Map<String, FlxActionDigital> = [];
 
@@ -314,12 +327,86 @@ class Controls extends FlxActionSet
 
 		setKeyboardScheme(scheme, false);
 
+		noteActions = [_note_left, _note_down, _note_up, _note_right];
+		notePressActions = [_note_leftP, _note_downP, _note_upP, _note_rightP];
+		noteReleaseActions = [_note_leftR, _note_downR, _note_upR, _note_rightR];
+		refreshNoteCaches(0);
+
 		instance = this;
 	}
 
 	override function update()
 	{
 		super.update();
+		refreshNoteCaches(FlxG.elapsed);
+	}
+
+	inline function refreshNoteCaches(elapsed:Float):Void
+	{
+		final now = Timer.stamp();
+
+		for (i in 0...NOTE_COUNT)
+		{
+			final hold = noteActions[i].check();
+			final press = notePressActions[i].check();
+			final release = noteReleaseActions[i].check();
+
+			noteHoldCache[i] = hold;
+			notePressCache[i] = press;
+			noteReleaseCache[i] = release;
+
+			if (press)
+			{
+				noteHoldDurations[i] = 0;
+				noteLastPress[i] = now;
+			}
+			else if (hold)
+			{
+				noteHoldDurations[i] += elapsed;
+			}
+			else if (release)
+			{
+				noteHoldDurations[i] = 0;
+			}
+		}
+	}
+
+	public inline function getNoteStates(state:NoteInputState = Hold):Array<Bool>
+	{
+		return switch (state)
+		{
+			case Hold: noteHoldCache;
+			case Press: notePressCache;
+			case Release: noteReleaseCache;
+		}
+	}
+
+	public inline function getNoteHoldDuration(index:Int):Float
+	{
+		return noteHoldDurations[index];
+	}
+
+	public inline function getNoteLastPressTime(index:Int):Float
+	{
+		return noteLastPress[index];
+	}
+
+	public inline function wasNotePressedWithin(index:Int, windowMs:Float):Bool
+	{
+		if (windowMs <= 0) return false;
+		final last = noteLastPress[index];
+		return last >= 0 && (Timer.stamp() - last) * 1000 <= windowMs;
+	}
+
+	public inline function countActiveNotes(state:NoteInputState = Hold):Int
+	{
+		final source = getNoteStates(state);
+		var total = 0;
+		for (value in source)
+		{
+			if (value) total++;
+		}
+		return total;
 	}
 
 	// inline
