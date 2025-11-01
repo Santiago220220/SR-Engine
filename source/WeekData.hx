@@ -96,12 +96,16 @@ class WeekData {
 				}
 				else // Sort mod loading order based on modsList.txt file
 				{
-					var path = haxe.io.Path.join([Paths.mods(), splitName[0]]);
-					//trace('trying to push: ' + splitName[0]);
-					if (sys.FileSystem.isDirectory(path) && !Paths.ignoreModFolders.contains(splitName[0]) && !disabledMods.contains(splitName[0]) && !directories.contains(path + '/'))
-					{
-						directories.push(path + '/');
-						//trace('pushed Directory: ' + splitName[0]);
+				var path = haxe.io.Path.join([Paths.mods(), splitName[0]]);
+				//trace('trying to push: ' + splitName[0]);
+				#if js
+				if (!Paths.ignoreModFolders.contains(splitName[0]) && !disabledMods.contains(splitName[0]) && !directories.contains(path + '/'))
+				#else
+				if (sys.FileSystem.isDirectory(path) && !Paths.ignoreModFolders.contains(splitName[0]) && !disabledMods.contains(splitName[0]) && !directories.contains(path + '/'))
+				#end
+				{
+					directories.push(path + '/');
+					//trace('pushed Directory: ' + splitName[0]);
 					}
 				}
 			}
@@ -149,21 +153,34 @@ class WeekData {
 		#if MODS_ALLOWED
 		for (i in 0...directories.length) {
 			var directory:String = directories[i] + 'weeks/';
-			if(FileSystem.exists(directory)) {
+			#if js
+		if (OpenFlAssets.exists(directory)) {
+		#else
+		if (FileSystem.exists(directory)) {
+		#end
 				var listOfWeeks:Array<String> = CoolUtil.coolTextFile(directory + 'weekList.txt');
 				for (daWeek in listOfWeeks)
 				{
 					var path:String = directory + daWeek + '.json';
-					if(sys.FileSystem.exists(path))
+					#if js
+					if (OpenFlAssets.exists(path))
+					#else
+					if (sys.FileSystem.exists(path))
+					#end
 					{
 						addWeek(daWeek, path, directories[i], i, originalLength);
 					}
 				}
 
+				#if !js
 				for (file in FileSystem.readDirectory(directory))
 				{
 					var path = haxe.io.Path.join([directory, file]);
 					if (!sys.FileSystem.isDirectory(path) && file.endsWith('.json'))
+				#else
+				// For HTML5, we can't read directories, so we'll skip this part
+				if (false)
+				#end
 					{
 						addWeek(file.substr(0, file.length - 5), path, directories[i], i, originalLength);
 					}
@@ -173,7 +190,11 @@ class WeekData {
 		#end
 	}
 
+	#if js
+	private function isValidWeekJson(data:Dynamic):Bool
+	#else
 	private static function isValidWeekJson(data:Dynamic):Bool
+	#end
 	{
 		if (data == null) return false;
 
@@ -218,6 +239,11 @@ class WeekData {
 
 	private static function getWeekFile(path:String):WeekFile {
 		var rawJson:String = null;
+		#if js
+		if(OpenFlAssets.exists(path)) {
+			rawJson = Assets.getText(path);
+		}
+		#else
 		#if MODS_ALLOWED
 		if(FileSystem.exists(path)) {
 			rawJson = File.getContent(path);
@@ -227,11 +253,17 @@ class WeekData {
 			rawJson = Assets.getText(path);
 		}
 		#end
+		#end
 
 		if (rawJson != null && rawJson.length > 0)
 		{
 			var parsed:Dynamic = haxe.Json.parse(rawJson);
+			#if js
+			var weekData = new WeekData(null, "");
+			if (weekData.isValidWeekJson(parsed))
+			#else
 			if (isValidWeekJson(parsed))
+			#end
 				return cast parsed;
 			else
 				return null; // Skip invalid week jsons
